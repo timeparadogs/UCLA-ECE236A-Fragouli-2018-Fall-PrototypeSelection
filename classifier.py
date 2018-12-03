@@ -26,7 +26,6 @@ class classifier():
     use of the above modules and member variables defined by you
     5) any other module that you deem fit and useful for the purpose.'''
 
-    
     def train_lp(self, verbose = False):
         '''Implement the linear programming formulation 
         and solve using cvxpy for prototype selection'''
