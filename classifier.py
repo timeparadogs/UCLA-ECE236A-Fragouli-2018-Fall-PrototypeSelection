@@ -1,9 +1,10 @@
 '''Libraries for Prototype selection'''
 import numpy as np
+import matplotlib.pyplot as plt
 from sklearn.datasets import load_breast_cancer
 from sklearn.datasets import load_iris
 from sklearn.datasets import load_digits
-import cvxpy as cvx
+import cvxopt as cvx
 import math as mt
 from sklearn.model_selection import KFold
 import sklearn.metrics
@@ -79,6 +80,7 @@ def gmm_2d_data_maker(pi_array_of_mixing_weights,
     else:
         sample_holderx = np.zeros(shape=(N_number_of_samples))
         sample_holdery = np.zeros(shape=(N_number_of_samples))
+        sample_holderl = np.zeros(shape=(N_number_of_samples))
         plt.figure(figsize=(10,10), dpi=100)
         for i in range(N_number_of_samples):
             #print(i)
@@ -86,19 +88,29 @@ def gmm_2d_data_maker(pi_array_of_mixing_weights,
 
             x, y = np.random.multivariate_normal(mu_array_of_means[k],
                                                    R_array_of_covs[k])
-            plt.plot(x, y, marker='x', c='C{}'.format(k), alpha=pi_array_of_mixing_weights[k])
+            #plt.plot(x, y, marker='x', c='C{}'.format(k), alpha=pi_array_of_mixing_weights[k])
             sample_holderx[i]=x
             sample_holdery[i]=y
-        plt.grid(b=True, which='major', alpha=0.25)
-        plt.title("Gaussian Mixture Model for 2 dimensions with {} Gaussians".format(K_number_of_gaussians))
-        plt.show()
-        
-        exiter = np.stack((sample_holderx,sample_holdery)).T
+            sample_holderl[i]=k
+        #plt.grid(b=True, which='major', alpha=0.25)
+        #plt.title("Gaussian Mixture Model for 2 dimensions with {} Gaussians".format(K_number_of_gaussians))
+        #plt.show()
+
+        X = np.stack((sample_holderx,sample_holdery), axis=1)
+
+        exiter = (X,sample_holderl)
    
     
     return(exiter)
-
-    hw1spec = gmm_2d_data_maker([0.2,0.5,0.3],
-                            [[20,0],[0,0],[0,20]],
+    
+GMM_TrainData = gmm_2d_data_maker([0.2,0.5,0.3],
+                            [[5,0],[0,0],[0,5]],
                             [[[0.1,0],[0,0.1]],[[0.3,0],[0,0.3]],[[0.5,0],[0,0.5]]],
                             1000)
+
+print((GMM_TrainData)[0].shape)
+print((GMM_TrainData)[1].shape)
+IRIS_TrainData = load_iris(return_X_y=True)
+print((IRIS_TrainData)[0].shape)
+print((IRIS_TrainData)[1].shape)
+
