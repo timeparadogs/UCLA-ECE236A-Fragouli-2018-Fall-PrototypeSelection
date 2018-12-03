@@ -8,7 +8,6 @@ import math as mt
 from sklearn.model_selection import KFold
 import sklearn.metrics
 
-
 class classifier():
     '''Contains functions for prototype selection'''
     def __init__(self, X, y, epsilon_, lambda_ ):
@@ -54,3 +53,52 @@ def cross_val(data, target, epsilon_, lambda_, k, verbose):
     prots /= k
     obj_val /= k
     return score, prots, obj_val
+
+
+
+def gmm_2d_data_maker(pi_array_of_mixing_weights, 
+                      mu_array_of_means, 
+                      R_array_of_covs, 
+                      N_number_of_samples):
+    exiter = []
+    
+    pi_array_of_mixing_weights = np.asarray(pi_array_of_mixing_weights)
+    K_number_of_gaussians = pi_array_of_mixing_weights.shape[0]
+    mu_array_of_means = np.asarray(mu_array_of_means)
+    R_array_of_covs = np.asarray(R_array_of_covs)
+    
+    
+    if len(pi_array_of_mixing_weights) != (K_number_of_gaussians):
+        print("Update your number of Gaussians for the given amount of probabilities!")
+        exiter.append(0)
+        
+    elif (np.sum(pi_array_of_mixing_weights)) != 1:
+        print("Your probabilities don't sum to 1!")
+        exiter.append(0)
+        
+    else:
+        sample_holderx = np.zeros(shape=(N_number_of_samples))
+        sample_holdery = np.zeros(shape=(N_number_of_samples))
+        plt.figure(figsize=(10,10), dpi=100)
+        for i in range(N_number_of_samples):
+            #print(i)
+            k = np.random.choice(K_number_of_gaussians,p=pi_array_of_mixing_weights)
+
+            x, y = np.random.multivariate_normal(mu_array_of_means[k],
+                                                   R_array_of_covs[k])
+            plt.plot(x, y, marker='x', c='C{}'.format(k), alpha=pi_array_of_mixing_weights[k])
+            sample_holderx[i]=x
+            sample_holdery[i]=y
+        plt.grid(b=True, which='major', alpha=0.25)
+        plt.title("Gaussian Mixture Model for 2 dimensions with {} Gaussians".format(K_number_of_gaussians))
+        plt.show()
+        
+        exiter = np.stack((sample_holderx,sample_holdery)).T
+   
+    
+    return(exiter)
+
+    hw1spec = gmm_2d_data_maker([0.2,0.5,0.3],
+                            [[20,0],[0,0],[0,20]],
+                            [[[0.1,0],[0,0.1]],[[0.3,0],[0,0.3]],[[0.5,0],[0,0.5]]],
+                            1000)
