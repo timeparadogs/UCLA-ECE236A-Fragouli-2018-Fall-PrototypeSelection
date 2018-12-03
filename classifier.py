@@ -15,18 +15,25 @@ class classifier():
         '''Store data points as unique indexes, and initialize 
         the required member variables eg. epsilon, lambda, 
         interpoint distances, points in neighborhood'''
+
+        self.X = X
+        self.y = y
+        self.epsilon_ = epsilon_
+        self.lambda_ = 1 / (self.X.shape)[0]
         
 
     '''Implement modules which will be useful in the train_lp() function
     for example
-    1) operations such as intersection, union etc of sets of datapoints
+    1) operations such as intersection, union, etc of sets of datapoints
     2) check for feasibility for the randomized algorithm approach
     3) compute the objective value with current prototype set
     4) fill in the train_lp() module which will make 
     use of the above modules and member variables defined by you
     5) any other module that you deem fit and useful for the purpose.'''
 
-    def train_lp(self, verbose = False):
+    def get
+
+    def train_lp(self, verbose=False):
         '''Implement the linear programming formulation 
         and solve using cvxpy for prototype selection'''
         
