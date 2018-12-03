@@ -18,6 +18,7 @@ class classifier():
 
         self.X = X
         self.y = y
+        assert( (self.X.shape)[0] == (self.y.shape)[0] )
         self.epsilon_ = epsilon_
         self.lambda_ = 1 / (self.X.shape)[0]
         
@@ -31,7 +32,9 @@ class classifier():
     use of the above modules and member variables defined by you
     5) any other module that you deem fit and useful for the purpose.'''
 
-    def get
+    def getNumOfClasses(self):
+        self.sizeL = len(set(self.y))
+        return(self.sizeL)      
 
     def train_lp(self, verbose=False):
         '''Implement the linear programming formulation 
@@ -115,9 +118,18 @@ GMM_TrainData = gmm_2d_data_maker([0.2,0.5,0.3],
                             [[[0.1,0],[0,0.1]],[[0.3,0],[0,0.3]],[[0.5,0],[0,0.5]]],
                             1000)
 
-print((GMM_TrainData)[0].shape)
-print((GMM_TrainData)[1].shape)
+X_GMM = (GMM_TrainData)[0]
+y_GMM = (GMM_TrainData)[1]
+lambda_GMM = 1 / (X_GMM.shape)[0]
+
+classiferGMM = classifier(X=X_GMM, y=y_GMM, epsilon_=0, lambda_=lambda_GMM)
+print(classiferGMM.getNumOfClasses())
+
 IRIS_TrainData = load_iris(return_X_y=True)
-print((IRIS_TrainData)[0].shape)
-print((IRIS_TrainData)[1].shape)
+X_IRIS = (IRIS_TrainData)[0]
+y_IRIS = (IRIS_TrainData)[1]
+lambda_IRIS = 1 / (X_IRIS.shape)[0]
+
+classiferIRIS = classifier(X=X_IRIS, y=y_IRIS, epsilon_=0, lambda_=lambda_IRIS)
+print(classiferIRIS.getNumOfClasses())
 
