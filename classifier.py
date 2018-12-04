@@ -32,7 +32,9 @@ class classifier():
     use of the above modules and member variables defined by you
     5) any other module that you deem fit and useful for the purpose.'''
 
+
     def getLabels(self):
+        '''Get the labels in the dataset'''
         self.L = set(self.y)
         return(set(self.y)) 
 
@@ -41,17 +43,59 @@ class classifier():
         self.sizeL = len(self.L)
         return(self.sizeL)    
 
-    def getSubsetOfData(self, desiredLabel):
+    def getSubsetOfDataGivenLabel(self, desiredLabel):
         '''Get a subset of the X data according to the label'''
         indices = [index for index, labels in enumerate(self.y) if labels == desiredLabel]
         X_l = self.X[indices]
         y_l = self.y[indices]
-        subDict = {
+        size = (X_l.shape)[0]
+        data = {
             "X_l": X_l,
             "y_l": y_l,
-            "indices": indices
+            "indices_l": indices,
+            "size_l": size
         }
-        return(subDict)
+        return(data)
+
+    def get_NOT_SubsetOfDataGivenLabel(self, NOT_desiredLabel):
+        '''Get a subset of the X data that are not of the input class'''
+        indices_NOT_l = [index for index, labels in enumerate(self.y) if labels != NOT_desiredLabel]
+        X_NOT_l = self.X[indices_NOT_l]
+        y_NOT_l = self.y[indices_NOT_l]
+        size_NOT_l = (X_NOT_l.shape)[0]
+        data_NOT_l = {
+            "X_NOT_l": X_NOT_l,
+            "y_NOT_l": y_NOT_l,
+            "indices_NOT_l": indices_NOT_l,
+            "size_NOT_l": size_NOT_l
+        }
+        return(data_NOT_l)
+
+    def checkPointInNeighborhood(self, x0, x_test, neighborhoodType="l2_ball"):
+        result = float('nan')
+        if neighborhoodType == "l2_ball":
+            result = (np.linalg.norm((x0-x_test), ord=2) <= self.epsilon_)
+
+        return(result)
+
+    def neighborhood_cap_NOT_SubsetOfDataGivenLabel(self, label, neighborhoodType="l2_ball"):
+        data = getSubsetOfDataGivenLabel(desiredLabel=label)
+        X_l = data["X_l"]
+        data_NOT_l = get_NOT_SubsetOfDataGivenLabel(NOT_desiredLabel=label)
+        X_NOT_l = data_NOT_l["X_NOT_l"]
+        C_l_j_sets = []
+        for x_j_l in X_l:
+            temp_set_holder = {}
+            for x_n_NOT_l in X_NOT_l:
+                if checkPointInNeighborhood(x_j_l, x_n_NOT_l, neighborhoodType="l2_ball"):
+                    temp_set_holder.add(x_n_NOT_l)
+            C_l_j_sets.append(temp_set_holder)
+        
+        return(C_l_j_sets)
+
+    def C_l_j_constructor(self, label, neighborhoodType="l2_ball"):
+        C_l_j_sets = neighborhood_cap_NOT_SubsetOfDataGivenLabel(label=label, neighborhoodType="l2_ball")
+
 
     def train_lp(self, verbose=False):
         '''Implement the linear programming formulation 
@@ -111,7 +155,7 @@ def gmm_2d_data_maker(pi_array_of_mixing_weights,
         plt.figure(figsize=(10,10), dpi=100)
         for i in range(N_number_of_samples):
             #print(i)
-            k = np.random.choice(K_number_of_gaussians,p=pi_array_of_mixing_weights)
+            k = (np.random.choice(K_number_of_gaussians,p=pi_array_of_mixing_weights))
 
             x, y = np.random.multivariate_normal(mu_array_of_means[k],
                                                    R_array_of_covs[k])
@@ -130,27 +174,36 @@ def gmm_2d_data_maker(pi_array_of_mixing_weights,
     
     return(exiter)
     
-GMM_TrainData = gmm_2d_data_maker([0.2,0.5,0.3],
+TrainData_GMM = gmm_2d_data_maker([0.2,0.5,0.3],
                             [[5,0],[0,0],[0,5]],
                             [[[0.1,0],[0,0.1]],[[0.3,0],[0,0.3]],[[0.5,0],[0,0.5]]],
                             1000)
 
-X_GMM = (GMM_TrainData)[0]
-y_GMM = (GMM_TrainData)[1]
+X_GMM = (TrainData_GMM)[0]
+y_GMM = (TrainData_GMM)[1]
 lambda_GMM = 1 / (X_GMM.shape)[0]
 
-classiferGMM = classifier(X=X_GMM, y=y_GMM, epsilon_=0, lambda_=lambda_GMM)
+classiferGMM = classifier(X=X_GMM, y=y_GMM, epsilon_=1, lambda_=lambda_GMM)
 print(classiferGMM.getLabels())
 print(classiferGMM.getNumOfLabels())
-#print(classiferGMM.getSubsetOfData(desiredLabel=1))
+data_1GMM = (classiferGMM.getSubsetOfDataGivenLabel(desiredLabel=1))
+data_2GMM = (classiferGMM.getSubsetOfDataGivenLabel(desiredLabel=2))
+print(classiferGMM.checkPointInNeighborhood(x0=data_1GMM["X_l"][0], x_test=data_1GMM["X_l"][1], neighborhoodType="l2_ball"))
+print(classiferGMM.checkPointInNeighborhood(x0=data_1GMM["X_l"][0], x_test=data_2GMM["X_l"][0], neighborhoodType="l2_ball"))
 
-IRIS_TrainData = load_iris(return_X_y=True)
-X_IRIS = (IRIS_TrainData)[0]
-y_IRIS = (IRIS_TrainData)[1]
+
+TrainData_IRIS = load_iris(return_X_y=True)
+X_IRIS = (TrainData_IRIS)[0]
+y_IRIS = (TrainData_IRIS)[1]
 lambda_IRIS = 1 / (X_IRIS.shape)[0]
 
-classiferIRIS = classifier(X=X_IRIS, y=y_IRIS, epsilon_=0, lambda_=lambda_IRIS)
+classiferIRIS = classifier(X=X_IRIS, y=y_IRIS, epsilon_=1, lambda_=lambda_IRIS)
 print(classiferIRIS.getLabels())
 print(classiferIRIS.getNumOfLabels())
-#print(classiferIRIS.getSubsetOfData(desiredLabel=1))
+data_1IRIS = (classiferIRIS.getSubsetOfDataGivenLabel(desiredLabel=1))
+data_2IRIS = (classiferIRIS.getSubsetOfDataGivenLabel(desiredLabel=2))
+print(classiferIRIS.checkPointInNeighborhood(x0=data_1IRIS["X_l"][0], x_test=data_1IRIS["X_l"][1], neighborhoodType="l2_ball"))
+print(classiferIRIS.checkPointInNeighborhood(x0=data_1IRIS["X_l"][0], x_test=data_2IRIS["X_l"][0], neighborhoodType="l2_ball"))
+
+
 
