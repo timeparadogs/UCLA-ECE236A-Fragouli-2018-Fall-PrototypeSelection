@@ -32,9 +32,26 @@ class classifier():
     use of the above modules and member variables defined by you
     5) any other module that you deem fit and useful for the purpose.'''
 
-    def getNumOfClasses(self):
-        self.sizeL = len(set(self.y))
-        return(self.sizeL)      
+    def getLabels(self):
+        self.L = set(self.y)
+        return(set(self.y)) 
+
+    def getNumOfLabels(self):
+        '''Get the number of classes or labels'''
+        self.sizeL = len(self.L)
+        return(self.sizeL)    
+
+    def getSubsetOfData(self, desiredLabel):
+        '''Get a subset of the X data according to the label'''
+        indices = [index for index, labels in enumerate(self.y) if labels == desiredLabel]
+        X_l = self.X[indices]
+        y_l = self.y[indices]
+        subDict = {
+            "X_l": X_l,
+            "y_l": y_l,
+            "indices": indices
+        }
+        return(subDict)
 
     def train_lp(self, verbose=False):
         '''Implement the linear programming formulation 
@@ -101,7 +118,7 @@ def gmm_2d_data_maker(pi_array_of_mixing_weights,
             #plt.plot(x, y, marker='x', c='C{}'.format(k), alpha=pi_array_of_mixing_weights[k])
             sample_holderx[i]=x
             sample_holdery[i]=y
-            sample_holderl[i]=k
+            sample_holderl[i]=int(k)
         #plt.grid(b=True, which='major', alpha=0.25)
         #plt.title("Gaussian Mixture Model for 2 dimensions with {} Gaussians".format(K_number_of_gaussians))
         #plt.show()
@@ -123,7 +140,9 @@ y_GMM = (GMM_TrainData)[1]
 lambda_GMM = 1 / (X_GMM.shape)[0]
 
 classiferGMM = classifier(X=X_GMM, y=y_GMM, epsilon_=0, lambda_=lambda_GMM)
-print(classiferGMM.getNumOfClasses())
+print(classiferGMM.getLabels())
+print(classiferGMM.getNumOfLabels())
+#print(classiferGMM.getSubsetOfData(desiredLabel=1))
 
 IRIS_TrainData = load_iris(return_X_y=True)
 X_IRIS = (IRIS_TrainData)[0]
@@ -131,5 +150,7 @@ y_IRIS = (IRIS_TrainData)[1]
 lambda_IRIS = 1 / (X_IRIS.shape)[0]
 
 classiferIRIS = classifier(X=X_IRIS, y=y_IRIS, epsilon_=0, lambda_=lambda_IRIS)
-print(classiferIRIS.getNumOfClasses())
+print(classiferIRIS.getLabels())
+print(classiferIRIS.getNumOfLabels())
+#print(classiferIRIS.getSubsetOfData(desiredLabel=1))
 
