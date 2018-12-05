@@ -5,7 +5,7 @@ from sklearn.datasets import load_breast_cancer
 from sklearn.datasets import load_iris
 from sklearn.datasets import load_digits
 import cvxpy as cvx
-import math as mt
+from scipy.stats import bernoulli
 from sklearn.model_selection import KFold
 import sklearn.metrics
 
@@ -109,28 +109,37 @@ class classifier():
         optimal_value_lin_holder = []
         data_dicts_holder = []
         for label in L:
-            print("Working on label {}...".format(label))
+            if verbose:
+                print("(train_lp) Working on label {}...".format(label))
             
             data = self.checkCoverOfNeighborhood_2(label=label, neighborhoodType="l2_ball")
             size_l = data["size_l"]
             C_l_j = data["C_l_j"]
             alpha_j_l = cvx.Variable(size_l,1)
             big1 = np.ones(shape=(size_l))
+            big0 = np.zeros(shape=(size_l))
             xi_n_l = cvx.Variable(size_l,1)
             constraintMat = data["constraintMat"]
 
             objective = cvx.Minimize( (C_l_j * alpha_j_l) + (big1 * xi_n_l))
 
             constraints = [constraintMat * alpha_j_l >= (big1 - xi_n_l), 
-            alpha_j_l <=1, 
-            alpha_j_l >=0,
-            xi_n_l >=0]
+            alpha_j_l <= big1, 
+            alpha_j_l <= 1,
+            alpha_j_l >= big0,
+            alpha_j_l >= 0,
+            xi_n_l <= 1,
+            xi_n_l >= big0,
+            xi_n_l >= big0,
+            xi_n_l >= 0]
 
             prob = cvx.Problem(objective, constraints)
             prob.solve()  # Returns the optimal value.
-            data["alpha_j_l_lin"] = alpha_j_l.value
-            data["xi_n_l_lin"] = xi_n_l.value
-            data["optimal_value_lin"] = prob.value
+            data["alpha_j_l_lin"] = [1 if alpha_j_l>=1 else alpha_j_l for alpha_j_l in alpha_j_l.value] 
+            data["alpha_j_l_lin"] = [0 if alpha_j_l<=0 else alpha_j_l for alpha_j_l in data["alpha_j_l_lin"]] 
+            data["xi_n_l_lin"] = [1 if xi_n_l>=1 else xi_n_l for xi_n_l in xi_n_l.value] 
+            data["xi_n_l_lin"] = [0 if xi_n_l<=0 else xi_n_l for xi_n_l in data["xi_n_l_lin"]]           
+            data["optimal_value_l_lin"] = prob.value
             optimal_value_lin_holder.append(prob.value)
             data_dicts_holder.append(data)
 
@@ -146,28 +155,101 @@ class classifier():
         print("linear program... solved!")
 
         
-    def objective_value(self):
+    def objective_value(self, verbose=False):
         '''Implement a function to compute the objective value of the integer optimization
         problem after the training phase'''
 
         data_dicts = self.data_dicts
-        alpha_j_lin_holder = self.alpha_j_lin_holder
-        xi_n_lin_holder = self.xi_n_lin_holder
-        optimal_value_lin = self.optimal_value_lin
 
         L = self.getLabels()
         A_j_round_holder = np.zeros(shape=self.size)
         S_n_round_holder = np.zeros(shape=self.size)
-        optimal_value_round_holder = 0
+        optimal_value_round_holder = []
+        data_dicts_holder = []
         for label in L:
+            if verbose:
+                print("(objective_value) Working on label {}...".format(label))
             data = data_dicts[label]
             size_l = data["size_l"]
             A_j_l_round_holder = np.zeros(shape=size_l)
             S_n_l_round_holder = np.zeros(shape=size_l)
-            optimal_value_lin_holder = data["optimal_value_lin"]
+            OPT_ROUND_COMP = float('nan')
+            C_l_j = data["C_l_j"]
+            alpha_j_l_lin = data["alpha_j_l_lin"]
+            xi_n_l_lin = data["xi_n_l_lin"]
+            optimal_value_l_lin = data["optimal_value_l_lin"]
+            OPT_LIN_COMP = 2* np.log(size_l)*optimal_value_l_lin
+            redo = True
+            feasibility_count = 0
+            while redo:
+                if verbose:
+                    print("redo session: {}".format(feasibility_count))
+                feasibility_count +=1
+                for t in range( int(np.ceil(2 * np.log(size_l))) ):
+                    for i in range(size_l):
+                        A_j_l_temp_i = bernoulli.rvs(alpha_j_l_lin[i])
+                        A_j_l_round_holder[i] = max(A_j_l_temp_i, A_j_l_round_holder[i])
+                        S_n_l_temp_i = bernoulli.rvs(xi_n_l_lin[i])
+                        S_n_l_round_holder[i] = max(S_n_l_temp_i, S_n_l_round_holder[i])
+                
+                constraintMat = data["constraintMat"]
 
-            for t in range(2 * np.log(size_l)):
-                pass
+                big1 = np.ones(shape=(size_l))
+
+                firstTemp = sum([c_l_j*A_j_l for c_l_j,A_j_l in zip(C_l_j,A_j_l_round_holder)])
+                secondTemp = sum(S_n_l_round_holder)
+                OPT_ROUND_COMP = firstTemp + secondTemp
+
+                LHS = constraintMat @ A_j_l_round_holder
+                RHS = big1 - S_n_l_round_holder
+
+                if verbose:
+                    if all([lhs>=rhs for lhs,rhs in zip(LHS,RHS)]):
+                        print("1st constraint passed: covering all points in a label")
+                        if all([A_j_l <= 1 for A_j_l in A_j_l_round_holder]):
+                            print("2nd constraint passed: A_j_l <=1")
+                            if all([A_j_l >= 0 for A_j_l in A_j_l_round_holder]):
+                                print("3rd constraint passed: A_j_l >=0")
+                                if all([(A_j_l == 0 or A_j_l == 1) for A_j_l in A_j_l_round_holder]):
+                                    if all([S_n_l >= 0 for S_n_l in S_n_l_round_holder]):
+                                        print("4th constraint passed: S_n_l >=0")
+                                        if (OPT_ROUND_COMP <= OPT_LIN_COMP):
+                                            print("objective value comparison passed")
+                                            redo = False
+
+                if all([lhs>=rhs for lhs,rhs in zip(LHS,RHS)]):
+                    if all([A_j_l <= 1 for A_j_l in A_j_l_round_holder]):
+                        if all([A_j_l >= 0 for A_j_l in A_j_l_round_holder]):
+                            if all([(A_j_l == 0 or A_j_l == 1) for A_j_l in A_j_l_round_holder]):
+                                if all([S_n_l >= 0 for S_n_l in S_n_l_round_holder]):
+                                    if (OPT_ROUND_COMP <= OPT_LIN_COMP):
+                                        redo = False
+
+
+            data["A_j_l_round_holder"] = A_j_l_round_holder
+            data["S_n_l_round_holder"] = S_n_l_round_holder
+            data["optimal_value_l_round"] = OPT_ROUND_COMP
+            optimal_value_round_holder.append(OPT_ROUND_COMP)
+            data_dicts_holder.append(data)
+
+            indices_l = data["indices_l"]
+            for index in indices_l:
+                A_j_round_holder[index] = A_j_l_round_holder[indices_l.index(index)]
+                S_n_round_holder[index] = S_n_l_round_holder[indices_l.index(index)]
+        
+        self.A_j_round_holder = A_j_round_holder
+        self.S_n_round_holder = S_n_round_holder
+        self.optimal_value_round = sum(optimal_value_round_holder)
+        self.X_proto = [x for x,A_j in zip(self.X,A_j_round_holder) if A_j == 1]
+        self.X_proto = np.array(self.X_proto)
+        self.y_proto = [y for y,A_j in zip(self.y,A_j_round_holder) if A_j == 1]
+        self.size_proto = (self.X_proto.shape)[0]
+        self.data_dicts = data_dicts_holder
+        print("randomized rounding... solved!")
+
+
+
+
 
 
 
@@ -243,28 +325,33 @@ def gmm_2d_data_maker(pi_array_of_mixing_weights,
     
 TrainData_GMM = gmm_2d_data_maker([0.2,0.5,0.3],
                             [[5.5,0],[0,0],[0,5.5]],
-                            [[[0.1,0],[0,0.1]],[[0.3,0],[0,0.3]],[[0.5,0],[0,0.5]]],
-                            1000)
+                            [[[0.9,0],[0,12]],[[11,0],[0,12]],[[0.9,0],[0,0.5]]],
+                            250)
 
 X_GMM = (TrainData_GMM)[0]
 y_GMM = (TrainData_GMM)[1]
 lambda_GMM = 1 / (X_GMM.shape)[0]
 
-classifierGMM = classifier(X=X_GMM, y=y_GMM, epsilon_=5.5, lambda_=lambda_GMM)
-print(classifierGMM.getLabels())
-print(classifierGMM.getNumOfLabels())
+classifierGMM = classifier(X=X_GMM, y=y_GMM, epsilon_=3, lambda_=lambda_GMM)
 data_1GMM = (classifierGMM.instantiate_dataDict_0(desiredLabel=1))
 data_2GMM = (classifierGMM.instantiate_dataDict_0(desiredLabel=2))
 print(classifierGMM.checkPointInNeighborhood(x0=data_1GMM["X_l"][0], x_test=data_1GMM["X_l"][1], neighborhoodType="l2_ball"))
 print(classifierGMM.checkPointInNeighborhood(x0=data_1GMM["X_l"][0], x_test=data_2GMM["X_l"][0], neighborhoodType="l2_ball"))
-classifierGMM.train_lp()
+classifierGMM.train_lp(verbose=True)
+classifierGMM.objective_value(verbose=False)
+
+
 plt.figure(figsize=(8,8))
-print(max(classifierGMM.alpha_j_lin_holder))
 for i in range(classifierGMM.size):
-    plt.plot(classifierGMM.X[i][0],classifierGMM.X[i][1], marker='x', c='C{}'.format(classifierGMM.y[i]), alpha=0.1)
-    plt.plot(classifierGMM.X[i][0],classifierGMM.X[i][1], marker='o', markersize=10, c='C{}'.format(classifierGMM.y[i]), alpha=round(classifierGMM.alpha_j_lin_holder[i]))
+    plt.plot(classifierGMM.X[i][0],classifierGMM.X[i][1], marker='x', c='C{}'.format(classifierGMM.y[i]), alpha=0.5)
+angle = np.linspace(0, 2*np.pi, num=100)
+for i in range(classifierGMM.size_proto):
+    plt.plot(classifierGMM.X_proto[i][0],classifierGMM.X_proto[i][1], marker='o', c='C{}'.format(classifierGMM.y_proto[i]), alpha=1)
+    plt.fill(classifierGMM.X_proto[i][0] + classifierGMM.epsilon_*np.cos(angle), classifierGMM.X_proto[i][1] + classifierGMM.epsilon_*np.sin(angle), c='C{}'.format(classifierGMM.y_proto[i]), alpha=0.125)
 plt.show()
+plt.axis('equal')
 plt.savefig('gmm.png')
+
 
 TrainData_IRIS = load_iris(return_X_y=True)
 X_IRIS = (TrainData_IRIS)[0]
@@ -272,8 +359,6 @@ y_IRIS = (TrainData_IRIS)[1]
 lambda_IRIS = 1 / (X_IRIS.shape)[0]
 
 classifierIRIS = classifier(X=X_IRIS, y=y_IRIS, epsilon_=1, lambda_=lambda_IRIS)
-print(classifierIRIS.getLabels())
-print(classifierIRIS.getNumOfLabels())
 data_1IRIS = (classifierIRIS.instantiate_dataDict_0(desiredLabel=1))
 data_2IRIS = (classifierIRIS.instantiate_dataDict_0(desiredLabel=2))
 print(classifierIRIS.checkPointInNeighborhood(x0=data_1IRIS["X_l"][0], x_test=data_1IRIS["X_l"][1], neighborhoodType="l2_ball"))
