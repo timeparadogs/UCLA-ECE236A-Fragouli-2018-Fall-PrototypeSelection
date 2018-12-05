@@ -332,25 +332,25 @@ X_GMM = (TrainData_GMM)[0]
 y_GMM = (TrainData_GMM)[1]
 lambda_GMM = 1 / (X_GMM.shape)[0]
 
-classifierGMM = classifier(X=X_GMM, y=y_GMM, epsilon_=3, lambda_=lambda_GMM)
-data_1GMM = (classifierGMM.instantiate_dataDict_0(desiredLabel=1))
-data_2GMM = (classifierGMM.instantiate_dataDict_0(desiredLabel=2))
-print(classifierGMM.checkPointInNeighborhood(x0=data_1GMM["X_l"][0], x_test=data_1GMM["X_l"][1], neighborhoodType="l2_ball"))
-print(classifierGMM.checkPointInNeighborhood(x0=data_1GMM["X_l"][0], x_test=data_2GMM["X_l"][0], neighborhoodType="l2_ball"))
-classifierGMM.train_lp(verbose=True)
-classifierGMM.objective_value(verbose=False)
-
-
-plt.figure(figsize=(8,8))
-for i in range(classifierGMM.size):
-    plt.plot(classifierGMM.X[i][0],classifierGMM.X[i][1], marker='x', c='C{}'.format(classifierGMM.y[i]), alpha=0.5)
-angle = np.linspace(0, 2*np.pi, num=100)
-for i in range(classifierGMM.size_proto):
-    plt.plot(classifierGMM.X_proto[i][0],classifierGMM.X_proto[i][1], marker='o', c='C{}'.format(classifierGMM.y_proto[i]), alpha=1)
-    plt.fill(classifierGMM.X_proto[i][0] + classifierGMM.epsilon_*np.cos(angle), classifierGMM.X_proto[i][1] + classifierGMM.epsilon_*np.sin(angle), c='C{}'.format(classifierGMM.y_proto[i]), alpha=0.0625)
-plt.axis('equal')
-plt.savefig('gmm.png')
-plt.show()
+count = 1
+for epislon in np.logspace(-2,1.27,120):
+    classifierGMM = classifier(X=X_GMM, y=y_GMM, epsilon_=epislon, lambda_=lambda_GMM)
+    classifierGMM.train_lp(verbose=False)
+    classifierGMM.objective_value(verbose=False)
+    plt.figure(figsize=(8,8))
+    for i in range(classifierGMM.size):
+        plt.plot(classifierGMM.X[i][0],classifierGMM.X[i][1], marker='x', c='C{}'.format(classifierGMM.y[i]), alpha=0.5)
+    angle = np.linspace(0, 2*np.pi, num=100)
+    for i in range(classifierGMM.size_proto):
+        plt.plot(classifierGMM.X_proto[i][0],classifierGMM.X_proto[i][1], marker='o', c='C{}'.format(classifierGMM.y_proto[i]), alpha=1)
+        plt.fill(classifierGMM.X_proto[i][0] + classifierGMM.epsilon_*np.cos(angle), classifierGMM.X_proto[i][1] + classifierGMM.epsilon_*np.sin(angle), c='C{}'.format(classifierGMM.y_proto[i]), alpha=0.0625)
+    plt.axis('equal')
+    plt.title('epsilon= {}'.format(epislon))
+    plt.ylim(-12.5, 10)
+    plt.xlim(-12.5, 10)
+    plt.savefig('gifFolder/gmm{}.png'.format(count))
+    count+=1
+    #plt.show()
 
 
 TrainData_IRIS = load_iris(return_X_y=True)
