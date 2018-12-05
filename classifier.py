@@ -104,8 +104,8 @@ class classifier():
         '''Implement the linear programming formulation 
         and solve using cvxpy for prototype selection'''
         L = self.getLabels()
-        alpha_j_l_lin_holder = np.zeros(shape=self.size)
-        xi_i_l_lin_holder = np.zeros(shape=self.size)
+        alpha_j_lin_holder = np.zeros(shape=self.size)
+        xi_n_lin_holder = np.zeros(shape=self.size)
         optimal_value_lin_holder = []
         data_dicts_holder = []
         for label in L:
@@ -116,31 +116,31 @@ class classifier():
             C_l_j = data["C_l_j"]
             alpha_j_l = cvx.Variable(size_l,1)
             big1 = np.ones(shape=(size_l))
-            xi_i_l = cvx.Variable(size_l,1)
+            xi_n_l = cvx.Variable(size_l,1)
             constraintMat = data["constraintMat"]
 
-            objective = cvx.Minimize( (C_l_j * alpha_j_l) + (big1.T * xi_i_l))
+            objective = cvx.Minimize( (C_l_j * alpha_j_l) + (big1 * xi_n_l))
 
-            constraints = [constraintMat * alpha_j_l >= (big1 - xi_i_l), 
+            constraints = [constraintMat * alpha_j_l >= (big1 - xi_n_l), 
             alpha_j_l <=1, 
             alpha_j_l >=0,
-            xi_i_l >=0]
+            xi_n_l >=0]
 
             prob = cvx.Problem(objective, constraints)
             prob.solve()  # Returns the optimal value.
             data["alpha_j_l_lin"] = alpha_j_l.value
-            data["xi_i_l_lin"] = xi_i_l.value
+            data["xi_n_l_lin"] = xi_n_l.value
             data["optimal_value_lin"] = prob.value
             optimal_value_lin_holder.append(prob.value)
             data_dicts_holder.append(data)
 
             indices_l = data["indices_l"]
             for index in indices_l:
-                alpha_j_l_lin_holder[index] = alpha_j_l.value[indices_l.index(index)]
-                xi_i_l_lin_holder[index] = xi_i_l.value[indices_l.index(index)]
+                alpha_j_lin_holder[index] = alpha_j_l.value[indices_l.index(index)]
+                xi_n_lin_holder[index] = xi_n_l.value[indices_l.index(index)]
 
-        self.alpha_j_l_lin_holder = alpha_j_l_lin_holder
-        self.xi_i_l_lin_holder = xi_i_l_lin_holder
+        self.alpha_j_lin_holder = alpha_j_lin_holder
+        self.xi_n_lin_holder = xi_n_lin_holder
         self.optimal_value_lin = sum(optimal_value_lin_holder)
         self.data_dicts = data_dicts_holder
         print("linear program... solved!")
@@ -149,6 +149,28 @@ class classifier():
     def objective_value(self):
         '''Implement a function to compute the objective value of the integer optimization
         problem after the training phase'''
+
+        data_dicts = self.data_dicts
+        alpha_j_lin_holder = self.alpha_j_lin_holder
+        xi_n_lin_holder = self.xi_n_lin_holder
+        optimal_value_lin = self.optimal_value_lin
+
+        L = self.getLabels()
+        A_j_round_holder = np.zeros(shape=self.size)
+        S_n_round_holder = np.zeros(shape=self.size)
+        optimal_value_round_holder = 0
+        for label in L:
+            data = data_dicts[label]
+            size_l = data["size_l"]
+            A_j_l_round_holder = np.zeros(shape=size_l)
+            S_n_l_round_holder = np.zeros(shape=size_l)
+            optimal_value_lin_holder = data["optimal_value_lin"]
+
+            for t in range(2 * np.log(size_l)):
+                pass
+
+
+
         
     def predict(self, instances):
         '''Predicts the label for an array of instances using the framework learnt'''
@@ -220,7 +242,7 @@ def gmm_2d_data_maker(pi_array_of_mixing_weights,
     return(exiter)
     
 TrainData_GMM = gmm_2d_data_maker([0.2,0.5,0.3],
-                            [[15,0],[0,0],[0,15]],
+                            [[5.5,0],[0,0],[0,5.5]],
                             [[[0.1,0],[0,0.1]],[[0.3,0],[0,0.3]],[[0.5,0],[0,0.5]]],
                             1000)
 
@@ -228,7 +250,7 @@ X_GMM = (TrainData_GMM)[0]
 y_GMM = (TrainData_GMM)[1]
 lambda_GMM = 1 / (X_GMM.shape)[0]
 
-classifierGMM = classifier(X=X_GMM, y=y_GMM, epsilon_=5, lambda_=lambda_GMM)
+classifierGMM = classifier(X=X_GMM, y=y_GMM, epsilon_=5.5, lambda_=lambda_GMM)
 print(classifierGMM.getLabels())
 print(classifierGMM.getNumOfLabels())
 data_1GMM = (classifierGMM.instantiate_dataDict_0(desiredLabel=1))
@@ -237,10 +259,10 @@ print(classifierGMM.checkPointInNeighborhood(x0=data_1GMM["X_l"][0], x_test=data
 print(classifierGMM.checkPointInNeighborhood(x0=data_1GMM["X_l"][0], x_test=data_2GMM["X_l"][0], neighborhoodType="l2_ball"))
 classifierGMM.train_lp()
 plt.figure(figsize=(8,8))
-print(max(classifierGMM.alpha_j_l_lin_holder))
+print(max(classifierGMM.alpha_j_lin_holder))
 for i in range(classifierGMM.size):
     plt.plot(classifierGMM.X[i][0],classifierGMM.X[i][1], marker='x', c='C{}'.format(classifierGMM.y[i]), alpha=0.1)
-    plt.plot(classifierGMM.X[i][0],classifierGMM.X[i][1], marker='o', markersize=10, c='C{}'.format(classifierGMM.y[i]), alpha=round(classifierGMM.alpha_j_l_lin_holder[i]))
+    plt.plot(classifierGMM.X[i][0],classifierGMM.X[i][1], marker='o', markersize=10, c='C{}'.format(classifierGMM.y[i]), alpha=round(classifierGMM.alpha_j_lin_holder[i]))
 plt.show()
 plt.savefig('gmm.png')
 
