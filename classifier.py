@@ -348,9 +348,9 @@ angle = np.linspace(0, 2*np.pi, num=100)
 for i in range(classifierGMM.size_proto):
     plt.plot(classifierGMM.X_proto[i][0],classifierGMM.X_proto[i][1], marker='o', c='C{}'.format(classifierGMM.y_proto[i]), alpha=1)
     plt.fill(classifierGMM.X_proto[i][0] + classifierGMM.epsilon_*np.cos(angle), classifierGMM.X_proto[i][1] + classifierGMM.epsilon_*np.sin(angle), c='C{}'.format(classifierGMM.y_proto[i]), alpha=0.125)
-plt.show()
 plt.axis('equal')
 plt.savefig('gmm.png')
+plt.show()
 
 
 TrainData_IRIS = load_iris(return_X_y=True)
