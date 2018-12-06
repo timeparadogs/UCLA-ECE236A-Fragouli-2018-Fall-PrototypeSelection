@@ -120,8 +120,12 @@ class classifier():
             big0 = np.zeros(shape=(size_l))
             xi_n_l = cvx.Variable(size_l,1)
             constraintMat = data["constraintMat"]
+            if verbose:
+                plt.imshow(constraintMat)
+                plt.colorbar()
+                plt.show()
 
-            objective = cvx.Minimize( (C_l_j * alpha_j_l) + (big1 * xi_n_l))
+            objective = cvx.Minimize( (C_l_j * alpha_j_l) + cvx.sum(xi_n_l))
 
             constraints = [constraintMat * alpha_j_l >= (big1 - xi_n_l), 
             alpha_j_l <= big1, 
@@ -205,7 +209,7 @@ class classifier():
 
                 if verbose:
                     if all([lhs>=rhs for lhs,rhs in zip(LHS,RHS)]):
-                        print("1st constraint passed: covering all points in a label")
+                        print("1st constraint passed: covering points in a label")
                         if all([A_j_l <= 1 for A_j_l in A_j_l_round_holder]):
                             print("2nd constraint passed: A_j_l <=1")
                             if all([A_j_l >= 0 for A_j_l in A_j_l_round_holder]):
@@ -216,6 +220,11 @@ class classifier():
                                         if (OPT_ROUND_COMP <= OPT_LIN_COMP):
                                             print("objective value comparison passed")
                                             redo = False
+                                        else:
+                                            print(len(A_j_l_round_holder))
+                                            print(sum(A_j_l_round_holder))
+                                            print(len(S_n_l_round_holder))
+                                            print(sum(S_n_l_round_holder))
 
                 if all([lhs>=rhs for lhs,rhs in zip(LHS,RHS)]):
                     if all([A_j_l <= 1 for A_j_l in A_j_l_round_holder]):
@@ -246,16 +255,25 @@ class classifier():
         self.size_proto = (self.X_proto.shape)[0]
         self.data_dicts = data_dicts_holder
         print("randomized rounding... solved!")
-
-
-
-
-
-
-
         
-    def predict(self, instances):
-        '''Predicts the label for an array of instances using the framework learnt'''
+    def predict(self, X_instances):
+        '''
+        Predicts the label for an array of instances using the framework learnt
+        and returns it along the same index
+        '''
+        X_proto = self.X_proto
+        y_proto = self.y_proto
+
+        y_instances = []
+
+        for x_instance in X_instances:
+            dist_holder = []
+            for x_proto, in X_proto:
+                dist_holder.append( np.linalg.norm((x_instance-x_proto), ord=2) )
+            idx = np.argmin(dist_holder)
+            y_instances.append(y_proto[idx])
+
+
 
 
 def cross_val(data, target, epsilon_, lambda_, k, verbose):
@@ -324,16 +342,16 @@ def gmm_2d_data_maker(pi_array_of_mixing_weights,
     return(exiter)
     
 TrainData_GMM = gmm_2d_data_maker([0.2,0.5,0.3],
-                            [[5.5,0],[0,0],[0,5.5]],
-                            [[[0.9,0],[0,12]],[[11,0],[0,12]],[[0.9,0],[0,0.5]]],
-                            250)
+                            [[0,0],[10,0],[20,0]],
+                            [[[0.1,0],[0,10]],[[0.3,0],[0,11]],[[0.5,0],[0,12]]],
+                            50)
 
 X_GMM = (TrainData_GMM)[0]
 y_GMM = (TrainData_GMM)[1]
 lambda_GMM = 1 / (X_GMM.shape)[0]
 
 count = 1
-for epislon in np.logspace(-2,1.27,120):
+for epislon in range(7):
     classifierGMM = classifier(X=X_GMM, y=y_GMM, epsilon_=epislon, lambda_=lambda_GMM)
     classifierGMM.train_lp(verbose=False)
     classifierGMM.objective_value(verbose=False)
@@ -346,11 +364,9 @@ for epislon in np.logspace(-2,1.27,120):
         plt.fill(classifierGMM.X_proto[i][0] + classifierGMM.epsilon_*np.cos(angle), classifierGMM.X_proto[i][1] + classifierGMM.epsilon_*np.sin(angle), c='C{}'.format(classifierGMM.y_proto[i]), alpha=0.0625)
     plt.axis('equal')
     plt.title('epsilon= {}'.format(epislon))
-    plt.ylim(-12.5, 10)
-    plt.xlim(-12.5, 10)
-    plt.savefig('gifFolder/gmm{}.png'.format(count))
+    #plt.savefig('gifFolder/gmm{}.png'.format(count))
     count+=1
-    #plt.show()
+    plt.show()
 
 
 TrainData_IRIS = load_iris(return_X_y=True)
@@ -358,11 +374,10 @@ X_IRIS = (TrainData_IRIS)[0]
 y_IRIS = (TrainData_IRIS)[1]
 lambda_IRIS = 1 / (X_IRIS.shape)[0]
 
-classifierIRIS = classifier(X=X_IRIS, y=y_IRIS, epsilon_=1, lambda_=lambda_IRIS)
-data_1IRIS = (classifierIRIS.instantiate_dataDict_0(desiredLabel=1))
-data_2IRIS = (classifierIRIS.instantiate_dataDict_0(desiredLabel=2))
-print(classifierIRIS.checkPointInNeighborhood(x0=data_1IRIS["X_l"][0], x_test=data_1IRIS["X_l"][1], neighborhoodType="l2_ball"))
-print(classifierIRIS.checkPointInNeighborhood(x0=data_1IRIS["X_l"][0], x_test=data_2IRIS["X_l"][0], neighborhoodType="l2_ball"))
+for epislon in range(7):
+    classifierIRIS = classifier(X=X_IRIS, y=y_IRIS, epsilon_=1, lambda_=lambda_IRIS)
+    classifierIRIS.train_lp(verbose=True)
+    classifierIRIS.objective_value(verbose=True)
 
 
 
