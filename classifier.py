@@ -255,6 +255,7 @@ class classifier():
         self.size_proto = (self.X_proto.shape)[0]
         self.data_dicts = data_dicts_holder
         print("randomized rounding... solved!")
+        return(self.optimal_value_round)
         
     def predict(self, X_instances):
         '''
@@ -272,22 +273,21 @@ class classifier():
                 dist_holder.append( np.linalg.norm((x_instance-x_proto), ord=2) )
             idx = np.argmin(dist_holder)
             y_instances.append(y_proto[idx])
+        
+        return(y_instances)
 
-
-
-
-def cross_val(data, target, epsilon_, lambda_, k, verbose):
+def cross_val(X, y, epsilon_, lambda_, k, verbose):
     '''Implement a function which will perform k fold cross validation 
     for the given epsilon and lambda and returns the average test error and number of prototypes'''
     kf = KFold(n_splits=k, random_state=42)
     score = 0
     prots = 0
-    for train_index, test_index in kf.split(data):
-        ps = classifier(data[train_index], target[train_index], epsilon_, lambda_)
+    for train_index, test_index in kf.split(X):
+        ps = classifier(X[train_index], y[train_index], epsilon_, lambda_)
         ps.train_lp(verbose)
         obj_val += ps.objective_value()
-        score += sklearn.metrics.accuracy_score(target[test_index], ps.predict(data[test_index]))
-        '''implement code to count the total number of prototypes learnt and store it in prots'''
+        score += sklearn.metrics.accuracy_score(y[test_index], ps.predict(X[test_index]))
+        prots += ps.size_proto
     score /= k    
     prots /= k
     obj_val /= k
