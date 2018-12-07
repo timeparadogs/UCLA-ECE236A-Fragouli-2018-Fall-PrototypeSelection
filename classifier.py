@@ -290,9 +290,9 @@ def cross_val(X, y, epsilon_, lambda_, k, verbose):
         ps.train_lp(verbose)
         obj_val += ps.objective_value()
         test_score += sklearn.metrics.accuracy_score(y[test_index], ps.predict(X[test_index])[0])
-        test_error += 1 - test_score
+        test_error += (1 - test_score)
         cover_score += sklearn.metrics.accuracy_score(y[test_index], ps.predict(X[test_index])[1])
-        cover_error += 1 - cover_score
+        cover_error += (1 - cover_score)
         prots += ps.size_proto
     test_score /= k  
     test_error /= k
