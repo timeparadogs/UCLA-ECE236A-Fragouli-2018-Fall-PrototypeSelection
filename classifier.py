@@ -8,6 +8,7 @@ import cvxpy as cvx
 from scipy.stats import bernoulli
 from sklearn.model_selection import KFold
 import sklearn.metrics
+from scipy.spatial.distance import pdist, squareform
 
 class classifier():
     '''Contains functions for prototype selection'''
@@ -120,10 +121,10 @@ class classifier():
             big0 = np.zeros(shape=(size_l))
             xi_n_l = cvx.Variable(size_l,1)
             constraintMat = data["constraintMat"]
-            if verbose:
-                plt.imshow(constraintMat)
-                plt.colorbar()
-                plt.show()
+            #if verbose:
+                #plt.imshow(constraintMat)
+                #plt.colorbar()
+                #plt.show()
 
             objective = cvx.Minimize( (C_l_j * alpha_j_l) + cvx.sum(xi_n_l))
 
@@ -137,13 +138,21 @@ class classifier():
             xi_n_l >= 0]
 
             prob = cvx.Problem(objective, constraints)
-            prob.solve()  # Returns the optimal value.
+            prob.solve(solver=cvx.SCS)  # Returns the optimal value.
             data["alpha_j_l_lin"] = [1 if alpha_j_l>=1 else alpha_j_l for alpha_j_l in alpha_j_l.value] 
             data["alpha_j_l_lin"] = [0 if alpha_j_l<=0 else alpha_j_l for alpha_j_l in data["alpha_j_l_lin"]] 
             data["xi_n_l_lin"] = [1 if xi_n_l>=1 else xi_n_l for xi_n_l in xi_n_l.value] 
-            data["xi_n_l_lin"] = [0 if xi_n_l<=0 else xi_n_l for xi_n_l in data["xi_n_l_lin"]]           
-            data["optimal_value_l_lin"] = prob.value
-            optimal_value_lin_holder.append(prob.value)
+            data["xi_n_l_lin"] = [0 if xi_n_l<=0 else xi_n_l for xi_n_l in data["xi_n_l_lin"]]
+
+            firstTemp = sum([c_l_j*alpha_j_l for c_l_j,alpha_j_l in zip(C_l_j,data["alpha_j_l_lin"] )])
+            secondTemp = sum(data["xi_n_l_lin"])
+            OPT_LIN_l = firstTemp + secondTemp
+
+            data["optimal_value_l_lin"] = OPT_LIN_l
+            if verbose:
+                print("optimal value for class {l}: {p}".format(l=label, p=OPT_LIN_l))
+                print(prob.value)
+            optimal_value_lin_holder.append(OPT_LIN_l)
             data_dicts_holder.append(data)
 
             indices_l = data["indices_l"]
@@ -154,8 +163,11 @@ class classifier():
         self.alpha_j_lin_holder = alpha_j_lin_holder
         self.xi_n_lin_holder = xi_n_lin_holder
         self.optimal_value_lin = sum(optimal_value_lin_holder)
+        if verbose:
+            print("optimal value: {p}".format(p=sum(optimal_value_lin_holder)))
         self.data_dicts = data_dicts_holder
-        print("linear program... solved!")
+        if verbose:
+            print("linear program... solved!")
 
         
     def objective_value(self, verbose=False):
@@ -174,20 +186,24 @@ class classifier():
                 print("(objective_value) Working on label {}...".format(label))
             data = data_dicts[label]
             size_l = data["size_l"]
-            A_j_l_round_holder = np.zeros(shape=size_l)
-            S_n_l_round_holder = np.zeros(shape=size_l)
+            A_j_l_round_holder = np.zeros(shape=size_l, dtype=int)
+            S_n_l_round_holder = np.zeros(shape=size_l, dtype=int)
             OPT_ROUND_COMP = float('nan')
             C_l_j = data["C_l_j"]
             alpha_j_l_lin = data["alpha_j_l_lin"]
             xi_n_l_lin = data["xi_n_l_lin"]
             optimal_value_l_lin = data["optimal_value_l_lin"]
-            OPT_LIN_COMP = 2* np.log(size_l)*optimal_value_l_lin
+            OPT_LIN_COMP = 2* np.log(size_l) * optimal_value_l_lin
             redo = True
             feasibility_count = 0
             while redo:
                 if verbose:
                     print("redo session: {}".format(feasibility_count))
                 feasibility_count +=1
+                if feasibility_count > 30:
+                    print('check randomized rounding...')
+                A_j_l_round_holder = np.zeros(shape=size_l, dtype=int)
+                S_n_l_round_holder = np.zeros(shape=size_l, dtype=int)
                 for t in range( int(np.ceil(2 * np.log(size_l))) ):
                     for i in range(size_l):
                         A_j_l_temp_i = bernoulli.rvs(alpha_j_l_lin[i])
@@ -220,6 +236,8 @@ class classifier():
                                             print("objective value comparison passed")
                                             redo = False
                                         else:
+                                            print(OPT_LIN_COMP)
+                                            print(OPT_ROUND_COMP)
                                             print(len(A_j_l_round_holder))
                                             print(sum(A_j_l_round_holder))
                                             print(len(S_n_l_round_holder))
@@ -253,7 +271,8 @@ class classifier():
         self.y_proto = [y for y,A_j in zip(self.y,A_j_round_holder) if A_j == 1]
         self.size_proto = (self.X_proto.shape)[0]
         self.data_dicts = data_dicts_holder
-        print("randomized rounding... solved!")
+        if verbose:
+            print("randomized rounding... solved!")
         return(self.optimal_value_round)
         
     def predict(self, X_instances):
@@ -265,44 +284,56 @@ class classifier():
         y_proto = self.y_proto
 
         y_instances_test = []
+        y_instances_cover = []
 
         for x_instance in X_instances:
             dist_holder = []
-            for x_proto, in X_proto:
-                dist_holder.append( np.linalg.norm((x_instance-x_proto), ord=2) )
+            neighborhood_checker = []
+            for x_proto in X_proto:
+                dist = np.linalg.norm((x_instance-x_proto), ord=2)
+                dist_holder.append( dist )
+                neighborhood_checker.append( dist <= self.epsilon_ )
+
             idx = np.argmin(dist_holder)
-            y_instances.append(y_proto[idx])
-        
+            y_instances_test.append(y_proto[idx])
 
-        
-        return(y_instances_test, )
+            if sum(neighborhood_checker) == 1:
+                idx = neighborhood_checker.index(1)
+                y_instances_cover.append(y_proto[idx])
+            else:
+                y_instances_cover.append(-50)
 
-def cross_val(X, y, epsilon_, lambda_, k, verbose):
+        return(y_instances_test, y_instances_cover)
+
+def cross_val(X, y, epsilon_, lambda_, k, verbose=False):
     '''Implement a function which will perform k fold cross validation 
     for the given epsilon and lambda and returns the average test error and number of prototypes'''
     kf = KFold(n_splits=k, random_state=42)
     score = 0
     prots = 0
+    obj_val = 0
+    test_score = 0
     test_error = 0
+    cover_score = 0
     cover_error = 0
     for train_index, test_index in kf.split(X):
         ps = classifier(X[train_index], y[train_index], epsilon_, lambda_)
         ps.train_lp(verbose)
-        obj_val += ps.objective_value()
+        obj_val += ps.objective_value(verbose)
         test_score += sklearn.metrics.accuracy_score(y[test_index], ps.predict(X[test_index])[0])
-        test_error += (1 - test_score)
+        test_error += (1 - sklearn.metrics.accuracy_score(y[test_index], ps.predict(X[test_index])[0]))
         cover_score += sklearn.metrics.accuracy_score(y[test_index], ps.predict(X[test_index])[1])
-        cover_error += (1 - cover_score)
+        cover_error += (1 - sklearn.metrics.accuracy_score(y[test_index], ps.predict(X[test_index])[1]))
         prots += ps.size_proto
+        if verbose:
+            print("finished with a fold!")
     test_score /= k  
     test_error /= k
     cover_score /= k
-    cover_error / k
+    cover_error /= k
     prots /= k
     obj_val /= k
     return test_score, test_error, cover_score, cover_error, prots, obj_val
-
-
 
 def gmm_2d_data_maker(pi_array_of_mixing_weights, 
                       mu_array_of_means, 
@@ -359,34 +390,111 @@ X_GMM = (TrainData_GMM)[0]
 y_GMM = (TrainData_GMM)[1]
 lambda_GMM = 1 / (X_GMM.shape)[0]
 
-count = 1
-for epislon in range(6):
-    classifierGMM = classifier(X=X_GMM, y=y_GMM, epsilon_=epislon, lambda_=lambda_GMM)
-    classifierGMM.train_lp(verbose=False)
-    classifierGMM.objective_value(verbose=False)
-    plt.figure(figsize=(8,8))
-    for i in range(classifierGMM.size):
-        plt.plot(classifierGMM.X[i][0],classifierGMM.X[i][1], marker='x', c='C{}'.format(classifierGMM.y[i]), alpha=0.5)
-    angle = np.linspace(0, 2*np.pi, num=100)
-    for i in range(classifierGMM.size_proto):
-        plt.plot(classifierGMM.X_proto[i][0],classifierGMM.X_proto[i][1], marker='o', c='C{}'.format(classifierGMM.y_proto[i]), alpha=1)
-        plt.fill(classifierGMM.X_proto[i][0] + classifierGMM.epsilon_*np.cos(angle), classifierGMM.X_proto[i][1] + classifierGMM.epsilon_*np.sin(angle), c='C{}'.format(classifierGMM.y_proto[i]), alpha=0.0625)
-    plt.axis('equal')
-    plt.title('epsilon= {}'.format(epislon))
-    #plt.savefig('gifFolder/gmm{}.png'.format(count))
-    count+=1
-    plt.show()
+# explicitly calculate the whole n x n distance matrix
+dist_mat_GMM = squareform(pdist(X_GMM, metric="euclidean"))
+dist_mat_GMM = dist_mat_GMM.flatten()
+dist_mat_GMM = [distance for distance in dist_mat_GMM if distance > 0]
+percentile2_GMM = np.percentile(dist_mat_GMM, q=2)
+percentile40_GMM = np.percentile(dist_mat_GMM, q=40)
+percentile60_GMM = np.percentile(dist_mat_GMM, q=60)
+epsilon_range_GMM = np.linspace(start=percentile2_GMM, stop=percentile60_GMM, num=500)
 
+test_error_holder_GMM = []
+cover_error_holder_GMM = []
+prot_number_holder_GMM = []
+for epsilon in epsilon_range_GMM:
+    print("on epsilon = {}".format(round(epsilon,4)))
+    test_score, test_error, cover_score, cover_error, prots, obj_val = cross_val(X_GMM, y_GMM, epsilon, lambda_GMM, k=4, verbose=False)
+    test_error_holder_GMM.append(test_error)
+    cover_error_holder_GMM.append(cover_error)
+    prot_number_holder_GMM.append(prots)
+
+plt.figure(figsize=(8.5,5.5))
+plt.scatter(prot_number_holder_GMM, test_error_holder_GMM, c='r', marker='o', alpha=0.5)
+plt.title('Test Error on the Gaussian Mixtures Dataset')
+plt.ylabel('Test Error')
+plt.xlabel('Average Number of Prototypes')
+plt.show()
+
+plt.figure(figsize=(8.5,5.5))
+plt.scatter(prot_number_holder_GMM, cover_error_holder_GMM, c='b', marker='o', alpha=0.5)
+plt.title('Cover Error on the Gaussian Mixtures Dataset')
+plt.ylabel('Cover Error')
+plt.xlabel('Average Number of Prototypes')
+plt.show()
 
 TrainData_IRIS = load_iris(return_X_y=True)
 X_IRIS = (TrainData_IRIS)[0]
 y_IRIS = (TrainData_IRIS)[1]
 lambda_IRIS = 1 / (X_IRIS.shape)[0]
 
-for epislon in range(7):
-    classifierIRIS = classifier(X=X_IRIS, y=y_IRIS, epsilon_=1, lambda_=lambda_IRIS)
-    classifierIRIS.train_lp(verbose=True)
-    classifierIRIS.objective_value(verbose=True)
+# explicitly calculate the whole n x n distance matrix
+dist_mat_IRIS = squareform(pdist(X_IRIS, metric="euclidean"))
+dist_mat_IRIS = dist_mat_IRIS.flatten()
+dist_mat_IRIS = [distance for distance in dist_mat_IRIS if distance > 0]
+percentile2_IRIS = np.percentile(dist_mat_IRIS, q=2)
+percentile40_IRIS = np.percentile(dist_mat_IRIS, q=40)
+percentile60_IRIS = np.percentile(dist_mat_IRIS, q=60)
+epsilon_range_IRIS = np.linspace(start=percentile2_IRIS, stop=percentile60_IRIS, num=5000)
 
+test_error_holder_IRIS = []
+cover_error_holder_IRIS = []
+prot_number_holder_IRIS = []
+for epsilon in epsilon_range_IRIS:
+    print("on epsilon = {}".format(round(epsilon,4)))
+    test_score, test_error, cover_score, cover_error, prots, obj_val = cross_val(X_IRIS, y_IRIS, epsilon, lambda_IRIS, k=4, verbose=False)
+    test_error_holder_IRIS.append(test_error)
+    cover_error_holder_IRIS.append(cover_error)
+    prot_number_holder_IRIS.append(prots)
 
+plt.figure(figsize=(8.5,5.5))
+plt.scatter(prot_number_holder_IRIS, test_error_holder_IRIS, c='r', marker='o', alpha=0.5)
+plt.title('Test Error on the Iris Dataset')
+plt.ylabel('Test Error')
+plt.xlabel('Average Number of Prototypes')
+plt.show()
 
+plt.figure(figsize=(8.5,5.5))
+plt.scatter(prot_number_holder_IRIS, cover_error_holder_IRIS, c='b', marker='o', alpha=0.5)
+plt.title('Cover Error on the Iris Dataset')
+plt.ylabel('Cover Error')
+plt.xlabel('Average Number of Prototypes')
+plt.show()
+
+TrainData_CANC = load_breast_cancer(return_X_y=True)
+X_CANC = (TrainData_CANC)[0]
+y_CANC = (TrainData_CANC)[1]
+lambda_CANC = 1 / (X_CANC.shape)[0]
+
+# explicitly calculate the whole n x n distance matrix
+dist_mat_CANC = squareform(pdist(X_CANC, metric="euclidean"))
+dist_mat_CANC = dist_mat_CANC.flatten()
+dist_mat_CANC = [distance for distance in dist_mat_CANC if distance > 0]
+percentile2_CANC = np.percentile(dist_mat_CANC, q=2)
+percentile40_CANC = np.percentile(dist_mat_CANC, q=40)
+percentile50_CANC = np.percentile(dist_mat_CANC, q=50)
+epsilon_range_CANC = np.linspace(start=percentile2_CANC, stop=percentile40_CANC, num=50)
+
+test_error_holder_CANC = []
+cover_error_holder_CANC = []
+prot_number_holder_CANC = []
+for epsilon in epsilon_range_CANC:
+    print("on epsilon = {}".format(round(epsilon,4)))
+    test_score, test_error, cover_score, cover_error, prots, obj_val = cross_val(X_CANC, y_CANC, epsilon, lambda_CANC, k=4, verbose=False)
+    test_error_holder_CANC.append(test_error)
+    cover_error_holder_CANC.append(cover_error)
+    prot_number_holder_CANC.append(prots)
+
+plt.figure(figsize=(8.5,5.5))
+plt.scatter(prot_number_holder_CANC, test_error_holder_CANC, c='r', marker='o', alpha=0.75)
+plt.title('Test Error on the Breast Cancer Dataset')
+plt.ylabel('Test Error')
+plt.xlabel('Average Number of Prototypes')
+plt.show()
+
+plt.figure(figsize=(8.5,5.5))
+plt.plot(prot_number_holder_CANC, cover_error_holder_CANC, c='r', marker='o', alpha=0.75)
+plt.title('Cover Error on the Breast Cancer Dataset')
+plt.ylabel('Cover Error')
+plt.xlabel('Average Number of Prototypes')
+plt.show()
