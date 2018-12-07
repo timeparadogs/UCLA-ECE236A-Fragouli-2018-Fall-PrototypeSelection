@@ -264,7 +264,7 @@ class classifier():
         X_proto = self.X_proto
         y_proto = self.y_proto
 
-        y_instances = []
+        y_instances_test = []
 
         for x_instance in X_instances:
             dist_holder = []
@@ -273,7 +273,9 @@ class classifier():
             idx = np.argmin(dist_holder)
             y_instances.append(y_proto[idx])
         
-        return(y_instances)
+
+        
+        return(y_instances_test, )
 
 def cross_val(X, y, epsilon_, lambda_, k, verbose):
     '''Implement a function which will perform k fold cross validation 
@@ -281,16 +283,24 @@ def cross_val(X, y, epsilon_, lambda_, k, verbose):
     kf = KFold(n_splits=k, random_state=42)
     score = 0
     prots = 0
+    test_error = 0
+    cover_error = 0
     for train_index, test_index in kf.split(X):
         ps = classifier(X[train_index], y[train_index], epsilon_, lambda_)
         ps.train_lp(verbose)
         obj_val += ps.objective_value()
-        score += sklearn.metrics.accuracy_score(y[test_index], ps.predict(X[test_index]))
+        test_score += sklearn.metrics.accuracy_score(y[test_index], ps.predict(X[test_index])[0])
+        test_error += 1 - test_score
+        cover_score += sklearn.metrics.accuracy_score(y[test_index], ps.predict(X[test_index])[1])
+        cover_error += 1 - cover_score
         prots += ps.size_proto
-    score /= k    
+    test_score /= k  
+    test_error /= k
+    cover_score /= k
+    cover_error / k
     prots /= k
     obj_val /= k
-    return score, prots, obj_val
+    return test_score, test_error, cover_score, cover_error, prots, obj_val
 
 
 
