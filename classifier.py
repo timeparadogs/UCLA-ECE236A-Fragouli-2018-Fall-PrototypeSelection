@@ -132,7 +132,6 @@ class classifier():
             alpha_j_l <= 1,
             alpha_j_l >= big0,
             alpha_j_l >= 0,
-            xi_n_l <= 1,
             xi_n_l >= big0,
             xi_n_l >= big0,
             xi_n_l >= 0]
@@ -351,7 +350,7 @@ y_GMM = (TrainData_GMM)[1]
 lambda_GMM = 1 / (X_GMM.shape)[0]
 
 count = 1
-for epislon in range(7):
+for epislon in range(6):
     classifierGMM = classifier(X=X_GMM, y=y_GMM, epsilon_=epislon, lambda_=lambda_GMM)
     classifierGMM.train_lp(verbose=False)
     classifierGMM.objective_value(verbose=False)
