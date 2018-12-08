@@ -1,7 +1,6 @@
 '''Libraries for Prototype selection'''
 import numpy as np
 from matplotlib import pyplot as plt
-from sklearn.datasets import load_digits
 import cvxpy as cvx
 from scipy.stats import bernoulli
 from sklearn.model_selection import KFold
@@ -65,14 +64,15 @@ class classifier():
         }
         return(data)
 
-    def checkPointInNeighborhood(self, x0, x_test, neighborhoodType="l2_ball"):
+    def checkPointInNeighborhood(self, x0, x_test, neighborhoodType):
         result = float('nan')
         if neighborhoodType == "l2_ball":
             result = (np.linalg.norm((x0-x_test), ord=2) <= self.epsilon_)
-
+        if neighborhoodType == "linf_cube":
+            result = (np.linalg.norm((x0-x_test), ord=np.inf) <= self.epsilon_)
         return(result)
 
-    def C_l_j_constructor_1(self, label, neighborhoodType="l2_ball"):
+    def C_l_j_constructor_1(self, label, neighborhoodType):
         data = self.instantiate_dataDict_0(desiredLabel=label)
         X_l = data["X_l"]
         X_NOT_l = data["X_NOT_l"]
@@ -80,26 +80,26 @@ class classifier():
         for x_j_l in X_l:
             temp_set_holder = 0
             for x_n_NOT_l in X_NOT_l:
-                if self.checkPointInNeighborhood(x_j_l, x_n_NOT_l, neighborhoodType="l2_ball"):
+                if self.checkPointInNeighborhood(x_j_l, x_n_NOT_l, neighborhoodType=neighborhoodType):
                     temp_set_holder += 1
             C_l_j_sets.append(temp_set_holder)
         C_l_j = [(self.lambda_ + C_l_j_set) for C_l_j_set in C_l_j_sets]
         data["C_l_j"] = C_l_j
         return(data)
 
-    def checkCoverOfNeighborhood_2(self, label, neighborhoodType="l2_ball"):
-        data = self.C_l_j_constructor_1(label=label, neighborhoodType="l2_ball")
+    def checkCoverOfNeighborhood_2(self, label, neighborhoodType):
+        data = self.C_l_j_constructor_1(label=label, neighborhoodType=neighborhoodType)
         X_l = data["X_l"]
         size_l = data["size_l"]
         constraintMat = np.zeros(shape=(size_l,size_l))
         for x_n_l in range(size_l):
             for x_j_l in range(size_l):
-                if self.checkPointInNeighborhood(X_l[x_j_l], X_l[x_n_l], neighborhoodType="l2_ball"):
+                if self.checkPointInNeighborhood(X_l[x_j_l], X_l[x_n_l], neighborhoodType=neighborhoodType):
                     constraintMat[x_n_l, x_j_l] = 1
         data["constraintMat"] = constraintMat
         return(data)
 
-    def train_lp(self, verbose=False):
+    def train_lp(self, neighborhoodType, verbose=False):
         '''Implement the linear programming formulation 
         and solve using cvxpy for prototype selection'''
         L = self.getLabels()
@@ -111,7 +111,7 @@ class classifier():
             if verbose:
                 print("(train_lp) Working on label {}...".format(label))
             
-            data = self.checkCoverOfNeighborhood_2(label=label, neighborhoodType="l2_ball")
+            data = self.checkCoverOfNeighborhood_2(label=label, neighborhoodType=neighborhoodType)
             size_l = data["size_l"]
             C_l_j = data["C_l_j"]
             alpha_j_l = cvx.Variable(size_l,1)
@@ -272,7 +272,7 @@ class classifier():
             print("randomized rounding... solved!")
         return(self.optimal_value_round)
         
-    def predict(self, X_instances):
+    def predict(self, X_instances, neighborhoodType):
         '''
         Predicts the label for an array of instances using the framework learnt
         and returns it along the same index
@@ -287,7 +287,11 @@ class classifier():
             dist_holder = []
             neighborhood_checker = []
             for x_proto in X_proto: # iterate through the prototypes
-                dist = np.linalg.norm((x_instance-x_proto), ord=2) # obtain the distances
+                dist = 0
+                if neighborhoodType == "l2_ball":
+                    dist = np.linalg.norm((x_instance-x_proto), ord=2) # obtain the distances
+                if neighborhoodType == "linf_cube":
+                    dist = np.linalg.norm((x_instance-x_proto), ord=np.inf) # obtain the distances
                 dist_holder.append( dist )
                 neighborhood_checker.append( dist <= self.epsilon_ ) # check whether the distance is less than epsilon
 
@@ -313,7 +317,7 @@ class classifier():
 
         return(y_instances_test, y_instances_cover)
 
-def cross_val(X, y, epsilon_, lambda_, k, verbose=False):
+def cross_val(X, y, epsilon_, lambda_, k, verbose=False, neighborhoodType='l2_ball'):
     '''Implement a function which will perform k fold cross validation 
     for the given epsilon and lambda and returns the average test error and number of prototypes'''
     kf = KFold(n_splits=k, random_state=42)
@@ -325,12 +329,12 @@ def cross_val(X, y, epsilon_, lambda_, k, verbose=False):
     obj_val = 0
     for train_index, test_index in kf.split(X):
         ps = classifier(X[train_index], y[train_index], epsilon_, lambda_)
-        ps.train_lp(verbose)
+        ps.train_lp(neighborhoodType=neighborhoodType, verbose=False)
         obj_val += ps.objective_value(verbose)
-        test_accuracy = sklearn.metrics.accuracy_score(y[test_index], ps.predict(X[test_index])[0])
+        test_accuracy = sklearn.metrics.accuracy_score(y[test_index], ps.predict(X[test_index], neighborhoodType=neighborhoodType)[0])
         test_score += test_accuracy
         test_error += (1 -test_accuracy)
-        cover_accuracy = sklearn.metrics.accuracy_score(y[test_index], ps.predict(X[test_index])[1])
+        cover_accuracy = sklearn.metrics.accuracy_score(y[test_index], ps.predict(X[test_index], neighborhoodType=neighborhoodType)[1])
         assert(cover_accuracy <= test_accuracy)
         cover_score += cover_accuracy
         cover_error += (1 - cover_accuracy)
@@ -390,58 +394,8 @@ def gmm_2d_data_maker(pi_array_of_mixing_weights,
    
     
     return(exiter)
-    
-TrainData_GMM = gmm_2d_data_maker([0.2,0.5,0.3],
-                            [[0,0],[10,0],[20,0]],
-                            [[[0.1,0],[0,10]],[[0.3,0],[0,11]],[[0.5,0],[0,12]]],
-                            100)
 
-TrainData_DIGIT = load_digits(return_X_y=True)
-X_DIGIT = (TrainData_DIGIT)[0]
-y_DIGIT = (TrainData_DIGIT)[1]
-lambda_DIGIT = 1 / (X_DIGIT.shape)[0]
 
-# explicitly calculate the whole n x n distance matrix
-dist_mat_DIGIT = squareform(pdist(X_DIGIT, metric="euclidean"))
-dist_mat_DIGIT = dist_mat_DIGIT.flatten()
-dist_mat_DIGIT = [distance for distance in dist_mat_DIGIT if distance > 0]
-percentile2_DIGIT = np.percentile(dist_mat_DIGIT, q=2)
-percentile40_DIGIT = np.percentile(dist_mat_DIGIT, q=40)
-percentile50_DIGIT = np.percentile(dist_mat_DIGIT, q=50)
-epsilon_range_DIGIT = np.linspace(start=percentile2_DIGIT, stop=percentile40_DIGIT, num=50)
+print("code check... succesful!")
 
-prot_number_holder_DIGIT = []
-test_error_holder_DIGIT = []
-cover_error_holder_DIGIT = []
-obj_value_holder_DIGIT = []
-for epsilon in epsilon_range_DIGIT:
-    print("on epsilon = {}".format(round(epsilon,4)))
-    test_score, test_error, cover_score, cover_error, prots, obj_val = cross_val(X_DIGIT, y_DIGIT, epsilon, lambda_DIGIT, k=4, verbose=False)
-    prot_number_holder_DIGIT.append(prots)
-    test_error_holder_DIGIT.append(test_error)
-    cover_error_holder_DIGIT.append(cover_error)
-    obj_value_holder_DIGIT.append(obj_val)
 
-plt.figure()
-plt.scatter(prot_number_holder_DIGIT, test_error_holder_DIGIT, c='r', marker='o', alpha=0.66, label='Test Error')
-plt.scatter(prot_number_holder_DIGIT, cover_error_holder_DIGIT, c='b', marker='o', alpha=0.66, label='Cover Error')
-plt.title('Error on the Digits Dataset')
-plt.ylabel('Average Error')
-plt.ylim(-0.1,1.1)
-plt.xlim(0)
-plt.grid(linestyle='--')
-plt.xlabel('Average Number of Prototypes')
-plt.legend()
-plt.savefig('digitsboth.png')
-plt.show()
-
-plt.figure()
-plt.scatter(epsilon_range_DIGIT, obj_value_holder_DIGIT, c='k', s=20*2**4, marker='2', alpha=1)
-plt.title('Average Integer Program Objective Values on the Digits Dataset')
-plt.ylabel('Average Objective Value')
-plt.ylim(0)
-plt.xlim(0)
-plt.grid(linestyle='--')
-plt.xlabel('Epsilon')
-plt.savefig('digiteps.png')
-plt.show()
