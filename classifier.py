@@ -134,7 +134,6 @@ class classifier():
             alpha_j_l >= big0,
             alpha_j_l >= 0,
             xi_n_l >= big0,
-            xi_n_l >= big0,
             xi_n_l >= 0]
 
             prob = cvx.Problem(objective, constraints)
@@ -280,28 +279,39 @@ class classifier():
         Predicts the label for an array of instances using the framework learnt
         and returns it along the same index
         '''
-        X_proto = self.X_proto
-        y_proto = self.y_proto
+        X_proto = self.X_proto # set of prototypes
+        y_proto = self.y_proto # set of prototype labels
 
-        y_instances_test = []
-        y_instances_cover = []
+        y_instances_test = [] # test prediction labels
+        y_instances_cover = [] # cover prediction labels
 
-        for x_instance in X_instances:
+        for x_instance in X_instances: # for each instance in the test set
             dist_holder = []
             neighborhood_checker = []
-            for x_proto in X_proto:
-                dist = np.linalg.norm((x_instance-x_proto), ord=2)
+            for x_proto in X_proto: # iterate through the prototypes
+                dist = np.linalg.norm((x_instance-x_proto), ord=2) # obtain the distances
                 dist_holder.append( dist )
-                neighborhood_checker.append( dist <= self.epsilon_ )
+                neighborhood_checker.append( dist <= self.epsilon_ ) # check whether the distance is less than epsilon
 
-            idx = np.argmin(dist_holder)
+            idx = np.argmin(dist_holder) # test prediction is the nearest prototype, find the smallest distance
             y_instances_test.append(y_proto[idx])
 
-            if sum(neighborhood_checker) == 1:
-                idx = neighborhood_checker.index(1)
-                y_instances_cover.append(y_proto[idx])
-            else:
-                y_instances_cover.append(-50)
+            if sum(neighborhood_checker) == 1.0: # cover prediction is the ONE ball it's in
+                idx_n = neighborhood_checker.index(1)
+                y_instances_cover.append(y_proto[idx_n])
+            if sum(neighborhood_checker) > 1.0:
+                labels = [label for label,y_index in zip(y_proto,neighborhood_checker) if y_index==1]
+                if labels.count(labels[0]) == len(labels):
+                    y_instances_cover.append(labels[0])
+                else:
+                    y_instances_cover.append(-2) # give it an incorrect label otherwise
+            if sum(neighborhood_checker) < 1.0:
+                y_instances_cover.append(-50) # give it an incorrect label otherwise
+
+            assert(len(y_instances_test) == len(y_instances_cover))
+            assert(y_instances_cover[-1] == y_instances_test[-1] or y_instances_cover[-1] < 0)
+        
+        assert(len(y_instances_test) == len(y_instances_cover))
 
         return(y_instances_test, y_instances_cover)
 
@@ -309,21 +319,23 @@ def cross_val(X, y, epsilon_, lambda_, k, verbose=False):
     '''Implement a function which will perform k fold cross validation 
     for the given epsilon and lambda and returns the average test error and number of prototypes'''
     kf = KFold(n_splits=k, random_state=42)
-    score = 0
-    prots = 0
-    obj_val = 0
     test_score = 0
     test_error = 0
     cover_score = 0
     cover_error = 0
+    prots = 0
+    obj_val = 0
     for train_index, test_index in kf.split(X):
         ps = classifier(X[train_index], y[train_index], epsilon_, lambda_)
         ps.train_lp(verbose)
         obj_val += ps.objective_value(verbose)
-        test_score += sklearn.metrics.accuracy_score(y[test_index], ps.predict(X[test_index])[0])
-        test_error += (1 - sklearn.metrics.accuracy_score(y[test_index], ps.predict(X[test_index])[0]))
-        cover_score += sklearn.metrics.accuracy_score(y[test_index], ps.predict(X[test_index])[1])
-        cover_error += (1 - sklearn.metrics.accuracy_score(y[test_index], ps.predict(X[test_index])[1]))
+        test_accuracy = sklearn.metrics.accuracy_score(y[test_index], ps.predict(X[test_index])[0])
+        test_score += test_accuracy
+        test_error += (1 -test_accuracy)
+        cover_accuracy = sklearn.metrics.accuracy_score(y[test_index], ps.predict(X[test_index])[1])
+        assert(cover_accuracy <= test_accuracy)
+        cover_score += cover_accuracy
+        cover_error += (1 - cover_accuracy)
         prots += ps.size_proto
         if verbose:
             print("finished with a fold!")
@@ -384,82 +396,7 @@ def gmm_2d_data_maker(pi_array_of_mixing_weights,
 TrainData_GMM = gmm_2d_data_maker([0.2,0.5,0.3],
                             [[0,0],[10,0],[20,0]],
                             [[[0.1,0],[0,10]],[[0.3,0],[0,11]],[[0.5,0],[0,12]]],
-                            50)
-
-X_GMM = (TrainData_GMM)[0]
-y_GMM = (TrainData_GMM)[1]
-lambda_GMM = 1 / (X_GMM.shape)[0]
-
-# explicitly calculate the whole n x n distance matrix
-dist_mat_GMM = squareform(pdist(X_GMM, metric="euclidean"))
-dist_mat_GMM = dist_mat_GMM.flatten()
-dist_mat_GMM = [distance for distance in dist_mat_GMM if distance > 0]
-percentile2_GMM = np.percentile(dist_mat_GMM, q=2)
-percentile40_GMM = np.percentile(dist_mat_GMM, q=40)
-percentile60_GMM = np.percentile(dist_mat_GMM, q=60)
-epsilon_range_GMM = np.linspace(start=percentile2_GMM, stop=percentile60_GMM, num=500)
-
-test_error_holder_GMM = []
-cover_error_holder_GMM = []
-prot_number_holder_GMM = []
-for epsilon in epsilon_range_GMM:
-    print("on epsilon = {}".format(round(epsilon,4)))
-    test_score, test_error, cover_score, cover_error, prots, obj_val = cross_val(X_GMM, y_GMM, epsilon, lambda_GMM, k=4, verbose=False)
-    test_error_holder_GMM.append(test_error)
-    cover_error_holder_GMM.append(cover_error)
-    prot_number_holder_GMM.append(prots)
-
-plt.figure(figsize=(8.5,5.5))
-plt.scatter(prot_number_holder_GMM, test_error_holder_GMM, c='r', marker='o', alpha=0.5)
-plt.title('Test Error on the Gaussian Mixtures Dataset')
-plt.ylabel('Test Error')
-plt.xlabel('Average Number of Prototypes')
-plt.show()
-
-plt.figure(figsize=(8.5,5.5))
-plt.scatter(prot_number_holder_GMM, cover_error_holder_GMM, c='b', marker='o', alpha=0.5)
-plt.title('Cover Error on the Gaussian Mixtures Dataset')
-plt.ylabel('Cover Error')
-plt.xlabel('Average Number of Prototypes')
-plt.show()
-
-TrainData_IRIS = load_iris(return_X_y=True)
-X_IRIS = (TrainData_IRIS)[0]
-y_IRIS = (TrainData_IRIS)[1]
-lambda_IRIS = 1 / (X_IRIS.shape)[0]
-
-# explicitly calculate the whole n x n distance matrix
-dist_mat_IRIS = squareform(pdist(X_IRIS, metric="euclidean"))
-dist_mat_IRIS = dist_mat_IRIS.flatten()
-dist_mat_IRIS = [distance for distance in dist_mat_IRIS if distance > 0]
-percentile2_IRIS = np.percentile(dist_mat_IRIS, q=2)
-percentile40_IRIS = np.percentile(dist_mat_IRIS, q=40)
-percentile60_IRIS = np.percentile(dist_mat_IRIS, q=60)
-epsilon_range_IRIS = np.linspace(start=percentile2_IRIS, stop=percentile60_IRIS, num=5000)
-
-test_error_holder_IRIS = []
-cover_error_holder_IRIS = []
-prot_number_holder_IRIS = []
-for epsilon in epsilon_range_IRIS:
-    print("on epsilon = {}".format(round(epsilon,4)))
-    test_score, test_error, cover_score, cover_error, prots, obj_val = cross_val(X_IRIS, y_IRIS, epsilon, lambda_IRIS, k=4, verbose=False)
-    test_error_holder_IRIS.append(test_error)
-    cover_error_holder_IRIS.append(cover_error)
-    prot_number_holder_IRIS.append(prots)
-
-plt.figure(figsize=(8.5,5.5))
-plt.scatter(prot_number_holder_IRIS, test_error_holder_IRIS, c='r', marker='o', alpha=0.5)
-plt.title('Test Error on the Iris Dataset')
-plt.ylabel('Test Error')
-plt.xlabel('Average Number of Prototypes')
-plt.show()
-
-plt.figure(figsize=(8.5,5.5))
-plt.scatter(prot_number_holder_IRIS, cover_error_holder_IRIS, c='b', marker='o', alpha=0.5)
-plt.title('Cover Error on the Iris Dataset')
-plt.ylabel('Cover Error')
-plt.xlabel('Average Number of Prototypes')
-plt.show()
+                            100)
 
 TrainData_CANC = load_breast_cancer(return_X_y=True)
 X_CANC = (TrainData_CANC)[0]
@@ -473,28 +410,49 @@ dist_mat_CANC = [distance for distance in dist_mat_CANC if distance > 0]
 percentile2_CANC = np.percentile(dist_mat_CANC, q=2)
 percentile40_CANC = np.percentile(dist_mat_CANC, q=40)
 percentile50_CANC = np.percentile(dist_mat_CANC, q=50)
-epsilon_range_CANC = np.linspace(start=percentile2_CANC, stop=percentile40_CANC, num=50)
+epsilon_range_CANC = np.linspace(start=percentile2_CANC, stop=percentile40_CANC, num=100)
 
 test_error_holder_CANC = []
 cover_error_holder_CANC = []
 prot_number_holder_CANC = []
-for epsilon in epsilon_range_CANC:
+for epsilon in epsilon_range_CANC[:-5]:
     print("on epsilon = {}".format(round(epsilon,4)))
     test_score, test_error, cover_score, cover_error, prots, obj_val = cross_val(X_CANC, y_CANC, epsilon, lambda_CANC, k=4, verbose=False)
     test_error_holder_CANC.append(test_error)
     cover_error_holder_CANC.append(cover_error)
     prot_number_holder_CANC.append(prots)
 
-plt.figure(figsize=(8.5,5.5))
-plt.scatter(prot_number_holder_CANC, test_error_holder_CANC, c='r', marker='o', alpha=0.75)
+plt.figure()
+plt.scatter(prot_number_holder_CANC, test_error_holder_CANC, c='r', marker='o', alpha=0.66)
 plt.title('Test Error on the Breast Cancer Dataset')
 plt.ylabel('Test Error')
+plt.ylim(-0.1,1.1)
+plt.xlim(0)
+plt.grid(linestyle='--')
 plt.xlabel('Average Number of Prototypes')
+plt.savefig('canctest.png')
 plt.show()
 
-plt.figure(figsize=(8.5,5.5))
-plt.plot(prot_number_holder_CANC, cover_error_holder_CANC, c='r', marker='o', alpha=0.75)
+plt.figure()
+plt.scatter(prot_number_holder_CANC, cover_error_holder_CANC, c='b', marker='o', alpha=0.5)
 plt.title('Cover Error on the Breast Cancer Dataset')
 plt.ylabel('Cover Error')
+plt.ylim(-0.1,1.1)
+plt.xlim(0)
+plt.grid(linestyle='--')
 plt.xlabel('Average Number of Prototypes')
+plt.savefig('canccover.png')
+plt.show()
+
+plt.figure()
+plt.scatter(prot_number_holder_CANC, test_error_holder_CANC, c='r', marker='o', alpha=0.66, label='Test Error')
+plt.scatter(prot_number_holder_CANC, cover_error_holder_CANC, c='b', marker='o', alpha=0.66, label='Cover Error')
+plt.title('Error on the Breast Cancer Dataset')
+plt.ylabel('Average Error')
+plt.ylim(-0.1,1.1)
+plt.xlim(0)
+plt.grid(linestyle='--')
+plt.xlabel('Average Number of Prototypes')
+plt.legend()
+plt.savefig('cancboth.png')
 plt.show()
