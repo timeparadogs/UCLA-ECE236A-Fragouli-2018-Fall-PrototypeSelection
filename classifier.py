@@ -1,8 +1,6 @@
 '''Libraries for Prototype selection'''
 import numpy as np
 from matplotlib import pyplot as plt
-from sklearn.datasets import load_breast_cancer
-from sklearn.datasets import load_iris
 from sklearn.datasets import load_digits
 import cvxpy as cvx
 from scipy.stats import bernoulli
@@ -398,61 +396,52 @@ TrainData_GMM = gmm_2d_data_maker([0.2,0.5,0.3],
                             [[[0.1,0],[0,10]],[[0.3,0],[0,11]],[[0.5,0],[0,12]]],
                             100)
 
-TrainData_CANC = load_breast_cancer(return_X_y=True)
-X_CANC = (TrainData_CANC)[0]
-y_CANC = (TrainData_CANC)[1]
-lambda_CANC = 1 / (X_CANC.shape)[0]
+TrainData_DIGIT = load_digits(return_X_y=True)
+X_DIGIT = (TrainData_DIGIT)[0]
+y_DIGIT = (TrainData_DIGIT)[1]
+lambda_DIGIT = 1 / (X_DIGIT.shape)[0]
 
 # explicitly calculate the whole n x n distance matrix
-dist_mat_CANC = squareform(pdist(X_CANC, metric="euclidean"))
-dist_mat_CANC = dist_mat_CANC.flatten()
-dist_mat_CANC = [distance for distance in dist_mat_CANC if distance > 0]
-percentile2_CANC = np.percentile(dist_mat_CANC, q=2)
-percentile40_CANC = np.percentile(dist_mat_CANC, q=40)
-percentile50_CANC = np.percentile(dist_mat_CANC, q=50)
-epsilon_range_CANC = np.linspace(start=percentile2_CANC, stop=percentile40_CANC, num=100)
+dist_mat_DIGIT = squareform(pdist(X_DIGIT, metric="euclidean"))
+dist_mat_DIGIT = dist_mat_DIGIT.flatten()
+dist_mat_DIGIT = [distance for distance in dist_mat_DIGIT if distance > 0]
+percentile2_DIGIT = np.percentile(dist_mat_DIGIT, q=2)
+percentile40_DIGIT = np.percentile(dist_mat_DIGIT, q=40)
+percentile50_DIGIT = np.percentile(dist_mat_DIGIT, q=50)
+epsilon_range_DIGIT = np.linspace(start=percentile2_DIGIT, stop=percentile40_DIGIT, num=50)
 
-test_error_holder_CANC = []
-cover_error_holder_CANC = []
-prot_number_holder_CANC = []
-for epsilon in epsilon_range_CANC[:-5]:
+prot_number_holder_DIGIT = []
+test_error_holder_DIGIT = []
+cover_error_holder_DIGIT = []
+obj_value_holder_DIGIT = []
+for epsilon in epsilon_range_DIGIT:
     print("on epsilon = {}".format(round(epsilon,4)))
-    test_score, test_error, cover_score, cover_error, prots, obj_val = cross_val(X_CANC, y_CANC, epsilon, lambda_CANC, k=4, verbose=False)
-    test_error_holder_CANC.append(test_error)
-    cover_error_holder_CANC.append(cover_error)
-    prot_number_holder_CANC.append(prots)
+    test_score, test_error, cover_score, cover_error, prots, obj_val = cross_val(X_DIGIT, y_DIGIT, epsilon, lambda_DIGIT, k=4, verbose=False)
+    prot_number_holder_DIGIT.append(prots)
+    test_error_holder_DIGIT.append(test_error)
+    cover_error_holder_DIGIT.append(cover_error)
+    obj_value_holder_DIGIT.append(obj_val)
 
 plt.figure()
-plt.scatter(prot_number_holder_CANC, test_error_holder_CANC, c='r', marker='o', alpha=0.66)
-plt.title('Test Error on the Breast Cancer Dataset')
-plt.ylabel('Test Error')
-plt.ylim(-0.1,1.1)
-plt.xlim(0)
-plt.grid(linestyle='--')
-plt.xlabel('Average Number of Prototypes')
-plt.savefig('canctest.png')
-plt.show()
-
-plt.figure()
-plt.scatter(prot_number_holder_CANC, cover_error_holder_CANC, c='b', marker='o', alpha=0.5)
-plt.title('Cover Error on the Breast Cancer Dataset')
-plt.ylabel('Cover Error')
-plt.ylim(-0.1,1.1)
-plt.xlim(0)
-plt.grid(linestyle='--')
-plt.xlabel('Average Number of Prototypes')
-plt.savefig('canccover.png')
-plt.show()
-
-plt.figure()
-plt.scatter(prot_number_holder_CANC, test_error_holder_CANC, c='r', marker='o', alpha=0.66, label='Test Error')
-plt.scatter(prot_number_holder_CANC, cover_error_holder_CANC, c='b', marker='o', alpha=0.66, label='Cover Error')
-plt.title('Error on the Breast Cancer Dataset')
+plt.scatter(prot_number_holder_DIGIT, test_error_holder_DIGIT, c='r', marker='o', alpha=0.66, label='Test Error')
+plt.scatter(prot_number_holder_DIGIT, cover_error_holder_DIGIT, c='b', marker='o', alpha=0.66, label='Cover Error')
+plt.title('Error on the Digits Dataset')
 plt.ylabel('Average Error')
 plt.ylim(-0.1,1.1)
 plt.xlim(0)
 plt.grid(linestyle='--')
 plt.xlabel('Average Number of Prototypes')
 plt.legend()
-plt.savefig('cancboth.png')
+plt.savefig('digitsboth.png')
+plt.show()
+
+plt.figure()
+plt.scatter(epsilon_range_DIGIT, obj_value_holder_DIGIT, c='k', s=20*2**4, marker='2', alpha=1)
+plt.title('Average Integer Program Objective Values on the Digits Dataset')
+plt.ylabel('Average Objective Value')
+plt.ylim(0)
+plt.xlim(0)
+plt.grid(linestyle='--')
+plt.xlabel('Epsilon')
+plt.savefig('digiteps.png')
 plt.show()

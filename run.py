@@ -98,7 +98,7 @@ plt.savefig('iristest.png')
 plt.show()
 
 plt.figure()
-plt.scatter(prot_number_holder_IRIS, cover_error_holder_IRIS, c='b', marker='o', alpha=0.5)
+plt.scatter(prot_number_holder_IRIS, cover_error_holder_IRIS, c='b', marker='o', alpha=0.66)
 plt.title('Cover Error on the Iris Dataset')
 plt.ylabel('Cover Error')
 plt.ylim(-0.1,1.1)
@@ -109,8 +109,8 @@ plt.savefig('iriscover.png')
 plt.show()
 
 plt.figure()
-plt.scatter(prot_number_holder_IRIS, test_error_holder_IRIS, c='r', marker='o', alpha=0.5, label='Test Error')
-plt.scatter(prot_number_holder_IRIS, cover_error_holder_IRIS, c='b', marker='o', alpha=0.5, label='Cover Error')
+plt.scatter(prot_number_holder_IRIS, test_error_holder_IRIS, c='r', marker='o', alpha=0.66, label='Test Error')
+plt.scatter(prot_number_holder_IRIS, cover_error_holder_IRIS, c='b', marker='o', alpha=0.66, label='Cover Error')
 plt.title('Error on the Iris Dataset')
 plt.ylabel('Error')
 plt.ylim(-0.1,1.1)
@@ -119,4 +119,63 @@ plt.grid(linestyle='--')
 plt.xlabel('Average Number of Prototypes')
 plt.legend()
 plt.savefig('irisboth.png')
+plt.show()
+
+TrainData_CANC = load_breast_cancer(return_X_y=True)
+X_CANC = (TrainData_CANC)[0]
+y_CANC = (TrainData_CANC)[1]
+lambda_CANC = 1 / (X_CANC.shape)[0]
+
+# explicitly calculate the whole n x n distance matrix
+dist_mat_CANC = squareform(pdist(X_CANC, metric="euclidean"))
+dist_mat_CANC = dist_mat_CANC.flatten()
+dist_mat_CANC = [distance for distance in dist_mat_CANC if distance > 0]
+percentile2_CANC = np.percentile(dist_mat_CANC, q=2)
+percentile40_CANC = np.percentile(dist_mat_CANC, q=40)
+percentile50_CANC = np.percentile(dist_mat_CANC, q=50)
+epsilon_range_CANC = np.linspace(start=percentile2_CANC, stop=percentile40_CANC, num=100)
+
+test_error_holder_CANC = []
+cover_error_holder_CANC = []
+prot_number_holder_CANC = []
+for epsilon in epsilon_range_CANC:
+    print("on epsilon = {}".format(round(epsilon,4)))
+    test_score, test_error, cover_score, cover_error, prots, obj_val = cross_val(X_CANC, y_CANC, epsilon, lambda_CANC, k=4, verbose=False)
+    test_error_holder_CANC.append(test_error)
+    cover_error_holder_CANC.append(cover_error)
+    prot_number_holder_CANC.append(prots)
+
+plt.figure()
+plt.scatter(prot_number_holder_CANC, test_error_holder_CANC, c='r', marker='o', alpha=0.66)
+plt.title('Test Error on the Breast Cancer Dataset')
+plt.ylabel('Test Error')
+plt.ylim(-0.1,1.1)
+plt.xlim(0)
+plt.grid(linestyle='--')
+plt.xlabel('Average Number of Prototypes')
+plt.savefig('canctest.png')
+plt.show()
+
+plt.figure()
+plt.scatter(prot_number_holder_CANC, cover_error_holder_CANC, c='b', marker='o', alpha=0.66)
+plt.title('Cover Error on the Breast Cancer Dataset')
+plt.ylabel('Cover Error')
+plt.ylim(-0.1,1.1)
+plt.xlim(0)
+plt.grid(linestyle='--')
+plt.xlabel('Average Number of Prototypes')
+plt.savefig('canccover.png')
+plt.show()
+
+plt.figure()
+plt.scatter(prot_number_holder_CANC, test_error_holder_CANC, c='r', marker='o', alpha=0.66, label='Test Error')
+plt.scatter(prot_number_holder_CANC, cover_error_holder_CANC, c='b', marker='o', alpha=0.66, label='Cover Error')
+plt.title('Error on the Breast Cancer Dataset')
+plt.ylabel('Average Error')
+plt.ylim(-0.1,1.1)
+plt.xlim(0)
+plt.grid(linestyle='--')
+plt.xlabel('Average Number of Prototypes')
+plt.legend()
+plt.savefig('cancboth.png')
 plt.show()
